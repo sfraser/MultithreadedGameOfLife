@@ -151,6 +151,21 @@
                [[(first %) (second %)] new-cell-state])
             batch-cells)))
 
+; I am here - incorporate this in as a way of distributing the work
+(defn vector-pmap [f v]
+  (let [n (.. Runtime getRuntime availableProcessors)
+        sectn (int (Math.ceil (/ (count v) n)))
+        agents (map #(agent (subvec v
+                                    (* sectn %)
+                                    (min (count v) (+ (* sectn %)
+sectn))))
+                    (range n))]
+    (doseq a agents
+      (send a #(doall (map f %))))
+    (apply await agents)
+    (into [] (apply concat (map deref agents)))))
+
+
 ; This is the all important function where parallelization kicks in
 ;(defn calc-state-old [cell-state mycells batch-set next-color]
 ;  (let [new-cells (ref {})]
