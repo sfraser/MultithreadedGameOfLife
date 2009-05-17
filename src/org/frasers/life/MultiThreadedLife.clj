@@ -1,9 +1,9 @@
 (comment
- ; Parallelized Conway's Game of Life
- ; Clojure implementation of "Conway's Game of Life" showing parallelization of the work.
- ; See 'http://groups.google.com/group/clojure/msg/73df9c3446bf092f for background.
- ; See 'http://www.youtube.com/watch?v=CFCYVfApPUc for an example run
- )
+  ; Parallelized Conway's Game of Life
+  ; Clojure implementation of "Conway's Game of Life" showing parallelization of the work.
+  ; See 'http://groups.google.com/group/clojure/msg/73df9c3446bf092f for background.
+  ; See 'http://www.youtube.com/watch?v=CFCYVfApPUc for an example run
+  )
 
 (ns org.frasers.life.MultiThreadedLife
   (:gen-class))
@@ -70,7 +70,7 @@
   ; and then set up a list of vectors: [threadNumber initialState]
   (let [initial-state (ref {})
         initial-states-and-numprocs
-            (for [i (range num-threads)] [(inc i) (ref (into {} @initial-state))])]
+        (for [i (range num-threads)] [(inc i) (ref (into {} @initial-state))])]
 
     ; this is where we calculate the initial state of the first window
     ; since all windows are initially pointing at the same map, everyone will
@@ -81,14 +81,14 @@
     ; we give each window 1, then 2, then 3... etc "threads" so the "precalced-batch-sets" are different
     ; sized for each window
     (def panels-and-state (for [[threadNumber cell-state] initial-states-and-numprocs]
-                            [(proxy [JPanel] [] (paint [graphics] (paint-cells graphics cell-state)))
-                                threadNumber
-                                cell-state
-                                ; since each window has a different set of threads, we calculate a "batch set" sized right for this window
-                                ; so for the 1 thread window there will be one big batch with all cells listed
-                                ; for a 2 thread window we will have 2 sets of cells listed
-                                (for [offset (range threadNumber)] (take-nth threadNumber (drop offset range-cells)))
-                             ])))
+      [(proxy [JPanel] [] (paint [graphics] (paint-cells graphics cell-state)))
+       threadNumber
+       cell-state
+       ; since each window has a different set of threads, we calculate a "batch set" sized right for this window
+       ; so for the 1 thread window there will be one big batch with all cells listed
+       ; for a 2 thread window we will have 2 sets of cells listed
+       (for [offset (range threadNumber)] (take-nth threadNumber (drop offset range-cells)))
+       ])))
 
   ; now we loop through the panels-and-state and materialize each one as a Swing JFrame
   ; @param panel JPanel with a threadNumber and current set of cell-state
@@ -120,8 +120,8 @@
 
 (defn next-color []
   (dosync (if (or (= @counter (dec num-colors)) (= @counter (dec num-threads)))
-            (ref-set counter 0)
-            (alter counter inc))))
+    (ref-set counter 0)
+    (alter counter inc))))
 
 (defn determine-initial-state [x y _]
   (= 0 (rand-int life-initial-prob)))
@@ -130,8 +130,8 @@
 (defn determine-new-state [x y mycells]
   (let [alive (count (for [dx [-1 0 1] dy [-1 0 1]
                            :when (and (not (= 0 dx dy))
-                                   (not (= empty-color (mycells [ (mod (+ x dx) x-cells) (mod (+ y dy) y-cells)]))))]
-                       :alive))]
+      (not (= empty-color (mycells [ (mod (+ x dx) x-cells) (mod (+ y dy) y-cells)]))))]
+    :alive))]
     (if (not (= (mycells [x y]) empty-color))
       (< 1 alive 4)
       (= alive 3))))
@@ -146,20 +146,20 @@
 (defn calc-batch-of-new-cell-states [cell-state batch-cells mycells next-color]
   ( let [thread-color (nth color-list (next-color))]
     doall (map
-            #(let [new-cell-state (if (cell-state (first %) (second %) mycells) thread-color empty-color)]
-               ;first here is the vector of [x y], and second is the state (color)
-               [[(first %) (second %)] new-cell-state])
-            batch-cells)))
+    #(let [new-cell-state (if (cell-state (first %) (second %) mycells) thread-color empty-color)]
+      ;first here is the vector of [x y], and second is the state (color)
+      [[(first %) (second %)] new-cell-state])
+    batch-cells)))
 
 ; I am here - incorporate this in as a way of distributing the work
 (defn vector-pmap [f v]
   (let [n (.. Runtime getRuntime availableProcessors)
         sectn (int (Math/ceil (/ (count v) n)))
         agents (map #(agent (subvec v
-                                    (* sectn %)
-                                    (min (count v) (+ (* sectn %)
-sectn))))
-                    (range n))]
+      (* sectn %)
+      (min (count v) (+ (* sectn %)
+        sectn))))
+      (range n))]
     (doseq a agents
       (send a #(doall (map f %))))
     (apply await agents)
@@ -178,10 +178,10 @@ sectn))))
 ; batches and be done with it
 (defn calc-state [cell-state mycells batch-set next-color]
   (let [new-cells (doall (reduce into {}
-             ; This no longer seems to run faster with more threads? Why? Tried doall, no difference
-             ; note that pmap is lazy so maybe since this used to be pmap inside of pmap???
-             (doall (pmap #(calc-batch-of-new-cell-states cell-state % mycells next-color)
-               batch-set))))]
+    ; This no longer seems to run faster with more threads? Why? Tried doall, no difference
+    ; note that pmap is lazy so maybe since this used to be pmap inside of pmap???
+    (doall (pmap #(calc-batch-of-new-cell-states cell-state % mycells next-color)
+      batch-set))))]
     (dosync (ref-set mycells new-cells))))
 
 ; Type Hint here makes a huge performance difference for the better
@@ -196,15 +196,15 @@ sectn))))
   (if @running
     (let [mycounter (ref 0)
           next-color #(dosync (if (or (= @mycounter (dec num-colors)) (= @mycounter (dec procs)))
-                                (ref-set mycounter 0)
-                                (alter mycounter inc)))]
+        (ref-set mycounter 0)
+        (alter mycounter inc)))]
       (do
         (. (Thread.
-             #(loop []
-                (calc-state determine-new-state mycells batch-set next-color)
-                (.repaint panel)
-                ;(if life-delay (Thread/sleep life-delay))
-                (if @running (recur))))
+          #(loop []
+            (calc-state determine-new-state mycells batch-set next-color)
+            (.repaint panel)
+            ;(if life-delay (Thread/sleep life-delay))
+            (if @running (recur))))
           start)))))
 
 
