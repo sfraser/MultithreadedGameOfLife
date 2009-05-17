@@ -154,7 +154,7 @@
 ; I am here - incorporate this in as a way of distributing the work
 (defn vector-pmap [f v]
   (let [n (.. Runtime getRuntime availableProcessors)
-        sectn (int (Math.ceil (/ (count v) n)))
+        sectn (int (Math/ceil (/ (count v) n)))
         agents (map #(agent (subvec v
                                     (* sectn %)
                                     (min (count v) (+ (* sectn %)
