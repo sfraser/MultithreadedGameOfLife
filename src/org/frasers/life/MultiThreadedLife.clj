@@ -152,20 +152,20 @@
     batch-cells)))
 
 ; I am here - incorporate this in as a way of distributing the work
-(defn vector-pmap [f v]
-  (let [n (.. Runtime getRuntime availableProcessors)
-        sectn (int (Math/ceil (/ (count v) n)))
-        agents (map #(agent (subvec v (* sectn %) (min (count v) (+ (* sectn %) sectn)))) 
-                      (range n))
-        ]
-    (doseq [a agents]
-      (send a #(doall (map f %))))
-    (apply await agents)
-    (into [] (apply concat (map deref agents)))))
+;(defn vector-pmap [f v]
+;  (let [n (.. Runtime getRuntime availableProcessors)
+;        sectn (int (Math/ceil (/ (count v) n)))
+;        agents (map #(agent (subvec v (* sectn %) (min (count v) (+ (* sectn %) sectn))))
+;                      (range n))
+;        ]
+;    (doseq [a agents]
+;      (send a #(doall (map f %))))
+;    (apply await agents)
+;    (into [] (apply concat (map deref agents)))))
 
 
 ; This is the all important function where parallelization kicks in
-(defn calc-state [cell-state mycells batch-set next-color]
+(defn calc-state-old [cell-state mycells batch-set next-color]
   (let [new-cells (ref {})]
     (dorun (pmap #(update-batch-of-new-cells new-cells %)
              (pmap #(calc-batch-of-new-cell-states cell-state % mycells next-color)
@@ -174,13 +174,13 @@
 
 ; Gonna try and reduce shared state - instead we'll put the states into the
 ; batches and be done with it
-;(defn calc-state [cell-state mycells batch-set next-color]
-;  (let [new-cells (doall (reduce into {}
-;    ; This no longer seems to run faster with more threads? Why? Tried doall, no difference
-;    ; note that pmap is lazy so maybe since this used to be pmap inside of pmap???
-;    (doall (pmap #(calc-batch-of-new-cell-states cell-state % mycells next-color)
-;      batch-set))))]
-;    (dosync (ref-set mycells new-cells))))
+(defn calc-state [cell-state mycells batch-set next-color]
+  (let [new-cells (reduce into {}
+    ; This no longer seems to run faster with more threads? Why? Tried doall, no difference
+    ; note that pmap is lazy so maybe since this used to be pmap inside of pmap???
+    (pmap #(calc-batch-of-new-cell-states cell-state % mycells next-color)
+      batch-set))]
+    (dosync (ref-set mycells new-cells))))
 
 ; Type Hint here makes a huge performance difference for the better
 (defn paint-cells [#^java.awt.Graphics graphics mycells]
