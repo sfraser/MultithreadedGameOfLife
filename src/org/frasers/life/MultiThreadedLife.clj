@@ -115,7 +115,7 @@
           (actionPerformed [evt]
             (reset! running (false? @running))
             (. b (setText (if @running "Start" "Stop")))
-            (doseq [[panel procs cell-state batch-set] panels-and-state] (toggle-thread panel cell-state batch-set procs)))))))
+            (doseq [[panel procs cell-state batch-set] panels-and-state] (toggle-thread panel cell-state batch-set)))))))
   )
 
 (defn next-color []
@@ -190,12 +190,17 @@
       (.fillRect (* cell-size x) (* cell-size y) cell-size cell-size))))
 
 ; This is what gets called when you hit the State/Stop button
-(defn toggle-thread [panel mycells batch-set procs]
+(defn toggle-thread [panel mycells batch-set]
   (if @running
     (let [mycounter (ref 0)
-          next-color #(dosync (if (or (= @mycounter (dec num-colors)) (= @mycounter (dec procs)))
+          num-batches (count batch-set)
+          next-color #(dosync (if (or (= @mycounter (dec num-colors)) (= @mycounter (dec num-batches)))
             (ref-set mycounter 0)
-            (alter mycounter inc)))]
+            (alter mycounter inc)))
+          ; set of agents for this windows exclusive use for painting - there will be one agent per batch set
+          ; assert (count (batch-set) == procs)
+          ; agents (map #(agent %) batch-set)
+          ]
       (do
         (. (Thread.
           #(loop []
