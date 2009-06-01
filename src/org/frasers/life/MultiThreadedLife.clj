@@ -60,22 +60,22 @@
   ;(def num-threads (.. java.lang.Runtime getRuntime availableProcessors))
   (def num-threads (Integer/parseInt arg-num-threads))
 
-  ; Create a list of [x y] coordinates, one for each "thread" so that everyone has a unique
-  ; set of cells to work on
-  (def initial-batch-sets (for [offset (range num-threads)] (take-nth num-threads (drop offset range-cells))))
-
   ; First we need to calculate the initial state that all the windows will start with
   ; easiest way is to have one map of cell states that all windows initially point to
   ; so we create an initial-state ref
   ; and then set up a list of vectors: [threadNumber initialState]
   (let [initial-state (ref {})
         initial-states-and-numprocs
-        (for [i (range num-threads)] [(inc i) (ref (into {} @initial-state))])]
+          (for [i (range num-threads)] [(inc i) (ref (into {} @initial-state))])
+          ]
 
     ; this is where we calculate the initial state of the first window
     ; since all windows are initially pointing at the same map, everyone will
     ; start up with the same state
-    (calc-state determine-initial-state initial-state initial-batch-sets next-color)
+    ; Would be nice to clean this up so at starup each window actually had the same number of colors it
+    ; will have after the user hits "start"
+    (let [initial-batch-sets (for [offset (range num-threads)] (take-nth num-threads (drop offset range-cells)))]
+      (calc-state determine-initial-state initial-state initial-batch-sets next-color))
 
     ; make a list of vectors of [panel procs cell-state precalced-batch-sets]
     ; we give each window 1, then 2, then 3... etc "threads" so the "precalced-batch-sets" are different
@@ -165,20 +165,20 @@
 
 
 ; This is the all important function where parallelization kicks in
-(defn calc-state-old [cell-state mycells batch-set next-color]
+(defn calc-state [cell-state-fn mycells batch-set next-color]
   (let [new-cells (ref {})]
     (dorun (pmap #(update-batch-of-new-cells new-cells %)
-             (pmap #(calc-batch-of-new-cell-states cell-state % mycells next-color)
+             (pmap #(calc-batch-of-new-cell-states cell-state-fn % mycells next-color)
                batch-set)))
     (dosync (ref-set mycells @new-cells))))
 
 ; Gonna try and reduce shared state - instead we'll put the states into the
 ; batches and be done with it
-(defn calc-state [cell-state mycells batch-set next-color]
+(defn calc-state-new [cell-state-fn mycells batch-set next-color]
   (let [new-cells (reduce into {}
     ; This no longer seems to run faster with more threads? Why? Tried doall, no difference
     ; note that pmap is lazy so maybe since this used to be pmap inside of pmap???
-    (pmap #(calc-batch-of-new-cell-states cell-state % mycells next-color)
+    (pmap #(calc-batch-of-new-cell-states cell-state-fn % mycells next-color)
       batch-set))]
     (dosync (ref-set mycells new-cells))))
 
@@ -194,8 +194,8 @@
   (if @running
     (let [mycounter (ref 0)
           next-color #(dosync (if (or (= @mycounter (dec num-colors)) (= @mycounter (dec procs)))
-        (ref-set mycounter 0)
-        (alter mycounter inc)))]
+            (ref-set mycounter 0)
+            (alter mycounter inc)))]
       (do
         (. (Thread.
           #(loop []
