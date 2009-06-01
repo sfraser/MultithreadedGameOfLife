@@ -137,11 +137,11 @@
       (= alive 3))))
 
 ; replaced this with a single threaded reduce in calc-state
-;(defn update-batch-of-new-cells [new-cells list-of-batches]
-;  (dosync
-;    ; first here is the vector of [x y], and second is the state
-;    (dorun (map #(commute new-cells assoc (first %) (second %))
-;             list-of-batches))))
+(defn update-batch-of-new-cells [new-cells list-of-batches]
+  (dosync
+    ; first here is the vector of [x y], and second is the state
+    (dorun (map #(commute new-cells assoc (first %) (second %))
+             list-of-batches))))
 
 (defn calc-batch-of-new-cell-states [cell-state batch-cells mycells next-color]
   ( let [thread-color (nth color-list (next-color))]
@@ -165,22 +165,22 @@
 
 
 ; This is the all important function where parallelization kicks in
-;(defn calc-state-old [cell-state mycells batch-set next-color]
-;  (let [new-cells (ref {})]
-;    (dorun (pmap #(update-batch-of-new-cells new-cells %)
-;             (pmap #(calc-batch-of-new-cell-states cell-state % mycells next-color)
-;               batch-set)))
-;    (dosync (ref-set mycells @new-cells))))
+(defn calc-state [cell-state mycells batch-set next-color]
+  (let [new-cells (ref {})]
+    (dorun (pmap #(update-batch-of-new-cells new-cells %)
+             (pmap #(calc-batch-of-new-cell-states cell-state % mycells next-color)
+               batch-set)))
+    (dosync (ref-set mycells @new-cells))))
 
 ; Gonna try and reduce shared state - instead we'll put the states into the
 ; batches and be done with it
-(defn calc-state [cell-state mycells batch-set next-color]
-  (let [new-cells (doall (reduce into {}
-    ; This no longer seems to run faster with more threads? Why? Tried doall, no difference
-    ; note that pmap is lazy so maybe since this used to be pmap inside of pmap???
-    (doall (pmap #(calc-batch-of-new-cell-states cell-state % mycells next-color)
-      batch-set))))]
-    (dosync (ref-set mycells new-cells))))
+;(defn calc-state [cell-state mycells batch-set next-color]
+;  (let [new-cells (doall (reduce into {}
+;    ; This no longer seems to run faster with more threads? Why? Tried doall, no difference
+;    ; note that pmap is lazy so maybe since this used to be pmap inside of pmap???
+;    (doall (pmap #(calc-batch-of-new-cell-states cell-state % mycells next-color)
+;      batch-set))))]
+;    (dosync (ref-set mycells new-cells))))
 
 ; Type Hint here makes a huge performance difference for the better
 (defn paint-cells [#^java.awt.Graphics graphics mycells]
