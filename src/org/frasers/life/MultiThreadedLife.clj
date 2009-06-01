@@ -155,12 +155,10 @@
 (defn vector-pmap [f v]
   (let [n (.. Runtime getRuntime availableProcessors)
         sectn (int (Math/ceil (/ (count v) n)))
-        agents (map #(agent (subvec v
-      (* sectn %)
-      (min (count v) (+ (* sectn %)
-        sectn))))
-      (range n))]
-    (doseq a agents
+        agents (map #(agent (subvec v (* sectn %) (min (count v) (+ (* sectn %) sectn)))) 
+                      (range n))
+        ]
+    (doseq [a agents]
       (send a #(doall (map f %))))
     (apply await agents)
     (into [] (apply concat (map deref agents)))))
