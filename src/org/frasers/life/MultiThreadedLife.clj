@@ -96,7 +96,8 @@
   ; @param cell-state current cell-state for this panel
   ; @param batch-set set of [x y] coordinates, one batch for each thread of the panel
   (doseq [[panel procs cell-state batch-set] panels-and-state]
-
+    ; todo - this is a horrible kludge to just show 4 versus 1 thread
+    (when (and (not (= procs 2)) (not (= procs 3)) )
     (let [f (JFrame. (format "Life - %s %s" procs (if (= procs 1) "Thread" "Threads" )))
           b (JButton. "Start")]
 
@@ -115,7 +116,10 @@
           (actionPerformed [evt]
             (reset! running (false? @running))
             (. b (setText (if @running "Start" "Stop")))
-            (doseq [[panel procs cell-state batch-set] panels-and-state] (toggle-thread panel cell-state batch-set)))))))
+            (doseq [[panel procs cell-state batch-set] panels-and-state]
+              ; todo - this is a horrible kludge to just show 4 versus 1 thread
+              (when (and (not (= procs 2)) (not (= procs 3)))
+              (toggle-thread panel cell-state batch-set)))))))))
   )
 
 (defn next-color []
@@ -167,11 +171,12 @@
 ; the agent will map it onto its batch-set, updating the batch-set as it goes
 (defn determine-new-state-in-agent [batch-cells mycells next-color-fn]
   (let [thread-color (nth color-list (next-color-fn))]
-   doall (map #(
+  ; it is AMAZING how this one change - putting the doall into a form - made all the differnce on perf due to no more lazy 
+  (doall (map #(
     let [new-cell-state (if (determine-new-state (first %) (second %) mycells) thread-color empty-color)]
        ;first here is the vector of [x y], and second is the state (color)
        [[(first %) (second %)] new-cell-state])
-    batch-cells)))
+    batch-cells))))
 
 ; This is the all important function where parallelization kicks in
 (defn calc-state-with-agents [batch-set mycells next-color-fn]
