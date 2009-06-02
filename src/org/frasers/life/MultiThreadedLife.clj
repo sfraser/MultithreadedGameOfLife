@@ -130,41 +130,32 @@
 (defn determine-new-state [x y mycells]
   (let [alive (count (for [dx [-1 0 1] dy [-1 0 1]
                            :when (and (not (= 0 dx dy))
-      (not (= empty-color (mycells [ (mod (+ x dx) x-cells) (mod (+ y dy) y-cells)]))))]
+      (not (= empty-color
+        (mycells
+          [ (mod (+ x dx) x-cells) (mod (+ y dy) y-cells)]))))]
     :alive))]
     (if (not (= (mycells [x y]) empty-color))
       (< 1 alive 4)
       (= alive 3))))
 
 ; replaced this with a single threaded reduce in calc-state
+; DEPRECATED - need to eliminate this, it is only used in startup now
 (defn update-batch-of-new-cells [new-cells list-of-batches]
   (dosync
     ; first here is the vector of [x y], and second is the state
     (dorun (map #(commute new-cells assoc (first %) (second %))
              list-of-batches))))
 
-(defn calc-batch-of-new-cell-states [cell-state batch-cells mycells next-color]
-  ( let [thread-color (nth color-list (next-color))]
+(defn calc-batch-of-new-cell-states [cell-state-fn batch-cells mycells next-color-fn]
+  ( let [thread-color (nth color-list (next-color-fn))]
     doall (map
-    #(let [new-cell-state (if (cell-state (first %) (second %) mycells) thread-color empty-color)]
+    #(let [new-cell-state (if (cell-state-fn (first %) (second %) mycells) thread-color empty-color)]
       ;first here is the vector of [x y], and second is the state (color)
       [[(first %) (second %)] new-cell-state])
     batch-cells)))
 
-; I am here - incorporate this in as a way of distributing the work
-;(defn vector-pmap [f v]
-;  (let [n (.. Runtime getRuntime availableProcessors)
-;        sectn (int (Math/ceil (/ (count v) n)))
-;        agents (map #(agent (subvec v (* sectn %) (min (count v) (+ (* sectn %) sectn))))
-;                      (range n))
-;        ]
-;    (doseq [a agents]
-;      (send a #(doall (map f %))))
-;    (apply await agents)
-;    (into [] (apply concat (map deref agents)))))
-
-
 ; This is the all important function where parallelization kicks in
+; DEPRECATED - need to eliminate this, it is only used in startup now
 (defn calc-state [cell-state-fn mycells batch-set next-color]
   (let [new-cells (ref {})]
     (dorun (pmap #(update-batch-of-new-cells new-cells %)
@@ -172,15 +163,25 @@
                batch-set)))
     (dosync (ref-set mycells @new-cells))))
 
-; Gonna try and reduce shared state - instead we'll put the states into the
-; batches and be done with it
-(defn calc-state-new [cell-state-fn mycells batch-set next-color]
-  (let [new-cells (reduce into {}
-    ; This no longer seems to run faster with more threads? Why? Tried doall, no difference
-    ; note that pmap is lazy so maybe since this used to be pmap inside of pmap???
-    (pmap #(calc-batch-of-new-cell-states cell-state-fn % mycells next-color)
-      batch-set))]
-    (dosync (ref-set mycells new-cells))))
+; this function is passed into an agent
+; the agent will map it onto its batch-set, updating the batch-set as it goes
+(defn determine-new-state-in-agent [batch-cells mycells next-color-fn]
+  (let [thread-color (nth color-list (next-color-fn))]
+   doall (map #(
+    let [new-cell-state (if (determine-new-state (first %) (second %) mycells) thread-color empty-color)]
+       ;first here is the vector of [x y], and second is the state (color)
+       [[(first %) (second %)] new-cell-state])
+    batch-cells)))
+
+; This is the all important function where parallelization kicks in
+(defn calc-state-with-agents [batch-set mycells next-color-fn]
+  (let [agents (map #(agent %) batch-set)]
+  (doseq [a agents]
+    (send a (fn [batch] (determine-new-state-in-agent batch mycells next-color-fn))))
+  (apply await agents)
+  (dosync (ref-set mycells
+    (reduce into {}
+      (map deref agents))))))
 
 ; Type Hint here makes a huge performance difference for the better
 (defn paint-cells [#^java.awt.Graphics graphics mycells]
@@ -194,21 +195,24 @@
   (if @running
     (let [mycounter (ref 0)
           num-batches (count batch-set)
-          next-color #(dosync (if (or (= @mycounter (dec num-colors)) (= @mycounter (dec num-batches)))
+          next-color-fn #(dosync (if (or (= @mycounter (dec num-colors)) (= @mycounter (dec num-batches)))
             (ref-set mycounter 0)
             (alter mycounter inc)))
           ; set of agents for this windows exclusive use for painting - there will be one agent per batch set
           ; assert (count (batch-set) == procs)
-          ; agents (map #(agent %) batch-set)
+          ; sectn (int (Math.ceil (/ (count mycells) num-batches )))
+          ; this should give each agent its own subset of this windows cells, each vec element is: [[x y] color]
+          ; agents (map #(agent (subvec mycells (* sectn %) (min (count mycells) (+ (* sectn %))))) (range num-batches))
           ]
       (do
         (. (Thread.
           #(loop []
-            (calc-state determine-new-state mycells batch-set next-color)
+            ;(calc-state determine-new-state mycells batch-set next-color)
+            (calc-state-with-agents batch-set mycells next-color-fn)
             (.repaint panel)
             ;(if life-delay (Thread/sleep life-delay))
             (if @running (recur))))
           start)))))
 
 
-(-main "3")
+(-main "4")
