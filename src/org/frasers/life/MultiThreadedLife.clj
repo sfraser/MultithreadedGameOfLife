@@ -80,19 +80,36 @@
                                         ; make a list of vectors of [panel procs cell-state precalced-batch-sets]
                                         ; we give each window 1, then 2, then 3... etc "threads" so the "precalced-batch-sets" are different
                                         ; sized for each window
-    (def panels-and-state (for [[threadNumber cell-state] initial-states-and-numprocs :let [fps (atom 0)]]
-                            [(proxy [JPanel] [] (paint [graphics]
-                                                  (paint-cells graphics cell-state)
-                                                  (doto graphics (.setColor Color/WHITE) (.drawString (format "frames: %d" (swap! fps inc)) 0 10))))
-                             threadNumber
-                             cell-state
-                                        ; since each window has a different set of threads, we calculate a "batch set" sized right for this window
-                                        ; so for the 1 thread window there will be one big batch with all cells listed
-                                        ; for a 2 thread window we will have 2 sets of cells listed
-                             (for [offset (range threadNumber)] (take-nth threadNumber (drop offset range-cells)))
-                             ])))
+    (def panels-and-state
+      (for [[threadNumber cell-state] initial-states-and-numprocs :let [frames (atom 0) lastts (atom 0) lastframes (atom 0) lastfps (atom 0)]]
+        [(proxy [JPanel] [] (paint [graphics]
+          ; paint the grid of cells
+          (paint-cells graphics cell-state)
+          ; increment our total frames painted
 
-                                        ; now we loop through the panels-and-state and materialize each one as a Swing JFrame
+          ; now overlay a little info about frames per second and total frames drawn
+          ; figure out if we passed over 1 second since last mark
+          (let [totalframes (swap! frames inc)
+                ts (System/currentTimeMillis)]
+            ; fps (if secondpassed (reset! fps (- @frames @lastmark)))
+            (doto graphics
+              (.setColor Color/WHITE)
+              (.drawString (format "frames: %d, fps: %d" totalframes @lastfps) 0 10))
+            ; reset lastts, lastfps, and lastframes if we just rolled over
+            (if (> ts (+ @lastts 1000))
+              (do
+                (reset! lastts ts)
+                (reset! lastfps (- @frames @lastframes))
+                (reset! lastframes @frames))))))
+         threadNumber
+         cell-state
+         ; since each window has a different set of threads, we calculate a "batch set" sized right for this window
+         ; so for the 1 thread window there will be one big batch with all cells listed
+         ; for a 2 thread window we will have 2 sets of cells listed
+         (for [offset (range threadNumber)] (take-nth threadNumber (drop offset range-cells)))
+         ])))
+
+  ; now we loop through the panels-and-state and materialize each one as a Swing JFrame
                                         ; @param panel JPanel with a threadNumber and current set of cell-state
                                         ; @param procs number of processes to use for this panel
                                         ; @param cell-state current cell-state for this panel
