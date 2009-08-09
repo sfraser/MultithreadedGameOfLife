@@ -27,7 +27,7 @@
 
 
 ; Size in pixels of the squares we will paint on the screen - make this smaller with larger size grids
-(def cell-size 5)
+(def cell-size 1                                                                                          )
 ; Optional Thread sleep factor to slow simulation down - I usually don't use it
 (def life-delay 0)
 ; Used when we randomly populate the grid at startup
@@ -66,8 +66,8 @@
                                         ; and then set up a list of vectors: [threadNumber initialState]
   (let [initial-state (ref {})
         initial-states-and-numprocs
-        (for [i (range num-threads)] [(inc i) (ref (into {} @initial-state))])
-        ]
+          (for [i (range num-threads)] [(inc i) (ref (into {} @initial-state))])
+       ]
 
                                         ; this is where we calculate the initial state of the first window
                                         ; since all windows are initially pointing at the same map, everyone will
@@ -80,24 +80,44 @@
                                         ; make a list of vectors of [panel procs cell-state precalced-batch-sets]
                                         ; we give each window 1, then 2, then 3... etc "threads" so the "precalced-batch-sets" are different
                                         ; sized for each window
-    (def panels-and-state (for [[threadNumber cell-state] initial-states-and-numprocs]
-                            [(proxy [JPanel] [] (paint [graphics] (paint-cells graphics cell-state)))
-                             threadNumber
-                             cell-state
-                                        ; since each window has a different set of threads, we calculate a "batch set" sized right for this window
-                                        ; so for the 1 thread window there will be one big batch with all cells listed
-                                        ; for a 2 thread window we will have 2 sets of cells listed
-                             (for [offset (range threadNumber)] (take-nth threadNumber (drop offset range-cells)))
-                             ])))
+    (def panels-and-state
+      (for [[threadNumber cell-state] initial-states-and-numprocs :let [frames (atom 0) lastts (atom 0) lastframes (atom 0) lastfps (atom 0)]]
+        [(proxy [JPanel] [] (paint [graphics]
+          ; paint the grid of cells
+          (paint-cells graphics cell-state)
+          ; increment our total frames painted
 
-                                        ; now we loop through the panels-and-state and materialize each one as a Swing JFrame
+          ; now overlay a little info about frames per second and total frames drawn
+          ; figure out if we passed over 1 second since last mark
+          (let [totalframes (swap! frames inc)
+                ts (System/currentTimeMillis)]
+            ; fps (if secondpassed (reset! fps (- @frames @lastmark)))
+            (doto graphics
+              (.setColor Color/WHITE)
+              (.drawString (format "frames: %d, fps: %d" totalframes @lastfps) 0 10))
+            ; reset lastts, lastfps, and lastframes if we just rolled over
+            (if (> ts (+ @lastts 1000))
+              (do
+                (reset! lastts ts)
+                (reset! lastfps (- @frames @lastframes))
+                (reset! lastframes @frames))))))
+         threadNumber
+         cell-state
+         ; since each window has a different set of threads, we calculate a "batch set" sized right for this window
+         ; so for the 1 thread window there will be one big batch with all cells listed
+         ; for a 2 thread window we will have 2 sets of cells listed
+         (for [offset (range threadNumber)] (take-nth threadNumber (drop offset range-cells)))
+         ])))
+
+  ; now we loop through the panels-and-state and materialize each one as a Swing JFrame
                                         ; @param panel JPanel with a threadNumber and current set of cell-state
                                         ; @param procs number of processes to use for this panel
                                         ; @param cell-state current cell-state for this panel
                                         ; @param batch-set set of [x y] coordinates, one batch for each thread of the panel
   (doseq [[panel procs cell-state batch-set] panels-and-state]
                                         ; todo - this is a horrible kludge to just show 4 versus 1 thread
-    (when (and (not (= procs 2)) (not (= procs 3)) )
+    ;(when (and (not (= procs 3)) (not (= procs 5)) )
+    (when 1
       (let [f (JFrame. (format "Life - %s %s" procs (if (= procs 1) "Thread" "Threads" )))
             b (JButton. "Start")]
 
@@ -118,7 +138,8 @@
                               (. b (setText (if @running "Start" "Stop")))
                               (doseq [[panel procs cell-state batch-set] panels-and-state]
                                         ; todo - this is a horrible kludge to just show 4 versus 1 thread
-                                (when (and (not (= procs 2)) (not (= procs 3)))
+                                ;(when (and (not (= procs 3)) (not (= procs 5)))
+                                (when 1
                                   (toggle-thread panel cell-state batch-set)))))))))
   )
 
@@ -217,4 +238,4 @@
            start)))))
 
 
-(-main "4")
+(-main "3")
