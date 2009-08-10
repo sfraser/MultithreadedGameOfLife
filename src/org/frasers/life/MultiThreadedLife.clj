@@ -27,7 +27,7 @@
 
 
 ; Size in pixels of the squares we will paint on the screen - make this smaller with larger size grids
-(def cell-size 1                                                                                          )
+(def cell-size 5                                                                                          )
 ; Optional Thread sleep factor to slow simulation down - I usually don't use it
 (def life-delay 0)
 ; Used when we randomly populate the grid at startup
