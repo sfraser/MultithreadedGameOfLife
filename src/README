@@ -19,13 +19,15 @@ fast each window is running.
 
 How to Run
 
-Call -main with the following params:
+At the top of the file set these vars:
+
+; Dimensions of the grid - make this bigger if you have more horsepower!
+(def x-cells ( * 32 2))
+(def y-cells ( * 48 2))
+
+; Size in pixels of the squares we will paint on the screen - make this smaller with larger size grids
+(def cell-size 5)
+
+Then call -main with the following params:
 
 * number of windows you want to see
-* how many rows of cells on the x-axis
-* how many rows of cells on the y-axis
-* how large the cells should be
-
-For example, to see 3 windows, that are 60x100 with cells 10 pixels in size:
-
-(-main 3 60 100 10)
