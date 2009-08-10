@@ -43,6 +43,8 @@
 (def empty-color Color/BLACK)
 (defn next-color)
 
+;(set! *warn-on-reflection* true)
+
 ; @param arg-num-threads How many windows to open
 ; @param x-cells, y-cells Dimensions of the grid - make this bigger if you have more horsepower!
 ; @param cell-size Size in pixels of the squares we will paint on the screen - make this smaller with larger size grids
@@ -82,10 +84,9 @@
            ; paint the grid of cells
            (paint-cells graphics cell-state)
            ; increment our total frames painted
-
-           ; now overlay a little info about frames per second and total frames drawn
            (let [totalframes (swap! frames inc)
                  ts (System/currentTimeMillis)]
+             ; now overlay a little info about frames per second and total frames drawn
              ; draw into the upper left of the window how many frames painted so far, and the rough "frames per second"
              (doto graphics
                (.setColor Color/WHITE)
@@ -152,12 +153,13 @@
 (defn determine-initial-state [x y _]
   (= 0 (rand-int life-initial-prob)))
 
+; figures out what the next state for a given cell should be
 (defn determine-new-state [x y mycells]
+  ; figure out how many cells around us are alive
   (let [alive (count (for [dx [-1 0 1] dy [-1 0 1]
                            :when (and (not (= 0 dx dy))
-      (not (= empty-color
-        (mycells
-          [(mod (+ x dx) x-cells) (mod (+ y dy) y-cells)]))))]
+                           ; note how we use modulus here to get cells to "overlap" edge of grid
+      (not (= empty-color (mycells [(mod (+ x dx) x-cells) (mod (+ y dy) y-cells)]))))]
     :alive))]
     (if (not (= (mycells [x y]) empty-color))
       (< 1 alive 4)
@@ -193,16 +195,19 @@
 (defn determine-new-state-in-agent [batch-cells mycells next-color-fn]
   (let [thread-color (nth color-list (next-color-fn))]
     (doall (map #(let [new-cell-state (if (determine-new-state (first %) (second %) mycells) thread-color empty-color)]
-      ;first here is the vector of [x y], and second is the state (color)
-      [[(first %) (second %)] new-cell-state])
-      batch-cells))))
+                        ;first here is the vector of [x y], and second is the state (color)
+                        [[(first %) (second %)] new-cell-state])
+              batch-cells))))
 
 ; This is the all important function where parallelization kicks in
+; I find it confusing how I am using agents here - the initial state is batch-sets, but the output is a going to mycells
+; would be nice to have agents that I don't have to recreate for every pass
 (defn calc-state-with-agents [batch-set mycells next-color-fn]
   (let [agents (map #(agent %) batch-set)]
     (doseq [a agents]
       (send a (fn [batch] (determine-new-state-in-agent batch mycells next-color-fn))))
     (apply await agents)
+    ; now copy all the results from the agents into @mycells so that we can paint the results to the panel
     (dosync (ref-set mycells
       (reduce into {}
         (map deref agents))))))
@@ -215,18 +220,19 @@
       (.fillRect (* cell-size x) (* cell-size y) cell-size cell-size))))
 
 ; This is what gets called when you hit the State/Stop button
-(defn toggle-thread [panel mycells batch-set]
+(defn toggle-thread [#^java.awt.Panel panel mycells batch-set]
   (if @running
     (let [mycounter (ref 0)
           num-batches (count batch-set)
           next-color-fn #(dosync (if (or (= @mycounter (dec num-colors)) (= @mycounter (dec num-batches)))
-        (ref-set mycounter 0)
-        (alter mycounter inc)))
+                                        (ref-set mycounter 0)
+                                        (alter mycounter inc)))
           ; set of agents for this windows exclusive use for painting - there will be one agent per batch set
           ; assert (count (batch-set) == procs)
           ; sectn (int (Math.ceil (/ (count mycells) num-batches )))
           ; this should give each agent its own subset of this windows cells, each vec element is: [[x y] color]
           ; agents (map #(agent (subvec mycells (* sectn %) (min (count mycells) (+ (* sectn %))))) (range num-batches))
+          ; agents (map #(agent %) batch-set)
           ]
       (do
         (. (Thread.
