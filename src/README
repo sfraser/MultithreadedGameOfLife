@@ -8,7 +8,7 @@ The more cores you have, the more effective a demonstration.
 Each window this program opens has it's own set of threads to execute the simulation. By watching a window with 1
 thread versus a window with 2, 3, or 4, you will visually see the power of parallelizing CPU intensive work.
 
-At the start of the simultion each window starts out with the same "state". When you hit the Start button (on any
+At the start of the simulation each window starts out with the same "state". When you hit the Start button (on any
 window), all the windows will start running the Game of Life. Each thread will use a specific color so that you can
 visually see the parallelism of the process. The windows are assigned an increasing number of threads from 1 to the
 total number of windows opened. So if you ask for 3 windows, you will get one window with 1 thread, another with 2
