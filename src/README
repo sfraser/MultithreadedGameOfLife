@@ -1,0 +1,31 @@
+
+This program runs 1 to many Game of Life simulations. For more on the "Game of Life", see: 
+    http://en.wikipedia.org/wiki/Conway%27s_Game_of_Life
+
+This code uses clojure concurrency primitives to demonstrate how threads can be used to get more done in less time.
+The more cores you have, the more effective a demonstration.
+
+Each window this program opens has it's own set of threads to execute the simulation. By watching a window with 1
+thread versus a window with 2, 3, or 4, you will visually see the power of parallelizing CPU intensive work.
+
+At the start of the simultion each window starts out with the same "state". When you hit the Start button (on any
+window), all the windows will start running the Game of Life. Each thread will use a specific color so that you can
+visually see the parallelism of the process. The windows are assigned an increasing number of threads from 1 to the
+total number of windows opened. So if you ask for 3 windows, you will get one window with 1 thread, another with 2
+threads, and a third with 3.
+
+There is a "total frames" and a "frames per second" indicator on each window so you can also get a rough feel for how
+fast each window is running.
+
+How to Run
+
+Call -main with the following params:
+
+* number of windows you want to see
+* how many rows of cells on the x-axis
+* how many rows of cells on the y-axis
+* how large the cells should be
+
+For example, to see 3 windows, that are 60x100 with cells 10 pixels in size:
+
+(-main 3 60 100 10)
