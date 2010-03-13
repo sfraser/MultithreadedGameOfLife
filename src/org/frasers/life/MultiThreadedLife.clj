@@ -209,6 +209,8 @@
     (apply await agents)
     ; now copy all the results from the agents into @mycells so that we can paint the results to the panel
     (dosync (ref-set mycells
+      ; I am going to guess we spend a ton of time here
+      ; the new transient based into might be helping us here, but swapping it in/out didn't help as much as I hoped
       (reduce into {}
         (map deref agents))))))
 
