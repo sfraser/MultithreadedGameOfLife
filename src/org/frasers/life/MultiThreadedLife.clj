@@ -31,8 +31,8 @@
 ;(def batch-sets (for [cpu (range available-procs)] (take-nth available-procs (drop cpu range-cells))))
 ;(def batch-sets)
 
-(defn calc-state)
-(defn determine-initial-state)
+(defn calc-initial-state)
+(defn random-initial-state)
 (defn paint-cells)
 (defn toggle-thread)
 
@@ -61,18 +61,19 @@
   ; easiest way is to have one map of cell states that all windows initially point to
   ; so we create an initial-state ref
   ; and then set up a list of vectors: [threadNumber initialState]
-  (let [initial-state (ref {})
+  (let [initial-state
+          (ref {})
         initial-states-and-numprocs
-        (for [i (range num-threads)] [(inc i) (ref (into {} @initial-state))])
+          (for [i (range num-threads)] [(inc i) (ref (into {} @initial-state))])
         ]
 
     ; this is where we calculate the initial state of the first window
     ; since all windows are initially pointing at the same map, everyone will
     ; start up with the same state
-    ; Would be nice to clean this up so at starup each window actually had the same number of colors it
+    ; Would be nice to clean this up so at startup each window actually had the same number of colors it
     ; will have after the user hits "start"
     (let [initial-batch-sets (for [offset (range num-threads)] (take-nth num-threads (drop offset range-cells)))]
-      (calc-state determine-initial-state initial-state initial-batch-sets next-color))
+      (calc-initial-state initial-state initial-batch-sets))
 
     ; make a list of vectors of [panel procs cell-state precalced-batch-sets]
     ; we give each window 1, then 2, then 3... etc "threads" so the "precalced-batch-sets" are different
@@ -102,7 +103,7 @@
          ; since each window has a different set of threads, we calculate a "batch set" sized right for this window
          ; so for the 1 thread window there will be one big batch with all cells listed
          ; for a 2 thread window we will have 2 sets of cells listed
-         (for [offset (range threadNumber)] (take-nth threadNumber (drop offset range-cells)))
+         (for [offset (range threadNumber)] (take-nth threadNumber (drop offset range-cells))) ; this is what we call "batchset" later
          ])))
 
 
@@ -145,54 +146,57 @@
                   (toggle-thread panel cell-state batch-set)))))))))
   )
 
-(defn next-color []
+(defn- next-color []
   (dosync (if (or (= @counter (dec num-colors)) (= @counter (dec num-threads)))
     (ref-set counter 0)
     (alter counter inc))))
 
-(defn determine-initial-state [x y _]
-  (= 0 (rand-int life-initial-prob)))
+(defn- random-initial-state [thread-color]
+  "Returns thread-color or empty-color randomly, based on life-initial-prob"
+  (if (= 0 (rand-int life-initial-prob))
+    thread-color
+    empty-color))
 
 ; figures out what the next state for a given cell should be
-(defn determine-new-state [x y mycells]
+(defn- determine-new-state [x y mycells]
   ; figure out how many cells around us are alive
-  (let [alive (count (for [dx [-1 0 1] dy [-1 0 1]
-                           :when (and (not (= 0 dx dy))
+  (let [numalive (count (for [dx [-1 0 1] dy [-1 0 1]
+                           :when (and (not (= 0 dx dy)) ; don't check ourself
                            ; note how we use modulus here to get cells to "overlap" edge of grid
-      (not (= empty-color (mycells [(mod (+ x dx) x-cells) (mod (+ y dy) y-cells)]))))]
-    :alive))]
+                                      (not (= empty-color
+                                        (mycells [(mod (+ x dx) x-cells) (mod (+ y dy) y-cells)]))))]
+                           :alive))]
     (if (not (= (mycells [x y]) empty-color))
-      (< 1 alive 4)
-      (= alive 3))))
+      (< 1 numalive 4)
+      (= numalive 3))))
 
 ; replaced this with a single threaded reduce in calc-state
 ; DEPRECATED - need to eliminate this, it is only used in startup now
-(defn update-batch-of-new-cells [new-cells list-of-batches]
+(defn- update-batch-of-new-cells [new-cells list-of-batches]
   (dosync
     ; first here is the vector of [x y], and second is the state
     (dorun (map #(commute new-cells assoc (first %) (second %))
       list-of-batches))))
 
-(defn calc-batch-of-new-cell-states [cell-state-fn batch-cells mycells next-color-fn]
-  (let [thread-color (nth color-list (next-color-fn))]
+(defn- calc-batch-of-new-cell-states [batch-cells mycells]
+  (let [thread-color (nth color-list (next-color))]
     doall (map
-    #(let [new-cell-state (if (cell-state-fn (first %) (second %) mycells) thread-color empty-color)]
+    #(let [new-cell-state (random-initial-state thread-color)]
       ;first here is the vector of [x y], and second is the state (color)
       [[(first %) (second %)] new-cell-state])
     batch-cells)))
 
-; This is the all important function where parallelization kicks in
 ; DEPRECATED - need to eliminate this, it is only used in startup now
-(defn calc-state [cell-state-fn mycells batch-set next-color]
+(defn- calc-initial-state [mycells batch-set]
   (let [new-cells (ref {})]
     (dorun (pmap #(update-batch-of-new-cells new-cells %)
-      (pmap #(calc-batch-of-new-cell-states cell-state-fn % mycells next-color)
+      (pmap #(calc-batch-of-new-cell-states % mycells)
         batch-set)))
     (dosync (ref-set mycells @new-cells))))
 
 ; this function is passed into an agent
 ; the agent will map it onto its batch-set, updating the batch-set as it goes
-(defn determine-new-state-in-agent [batch-cells mycells next-color-fn]
+(defn- determine-new-state-in-agent [batch-cells mycells next-color-fn]
   (let [thread-color (nth color-list (next-color-fn))]
     (doall (map #(let [new-cell-state (if (determine-new-state (first %) (second %) mycells) thread-color empty-color)]
                         ;first here is the vector of [x y], and second is the state (color)
@@ -202,10 +206,10 @@
 ; This is the all important function where parallelization kicks in
 ; I find it confusing how I am using agents here - the initial state is batch-sets, but the output is a going to mycells
 ; would be nice to have agents that I don't have to recreate for every pass
-(defn calc-state-with-agents [batch-set mycells next-color-fn]
+(defn- calc-state-with-agents [batch-set mycells next-color-fn]
   (let [agents (map #(agent %) batch-set)]
     (doseq [a agents]
-      (send a (fn [batch] (determine-new-state-in-agent batch mycells next-color-fn))))
+      (send a determine-new-state-in-agent mycells next-color-fn))
     (apply await agents)
     ; now copy all the results from the agents into @mycells so that we can paint the results to the panel
     (dosync (ref-set mycells
@@ -215,14 +219,14 @@
         (map deref agents))))))
 
 ; Type Hint here makes a huge performance difference for the better
-(defn paint-cells [#^java.awt.Graphics graphics mycells]
+(defn- paint-cells [#^java.awt.Graphics graphics mycells]
   (doseq [[[x,y] state] @mycells]
     (doto graphics
       (.setColor state)
       (.fillRect (* cell-size x) (* cell-size y) cell-size cell-size))))
 
 ; This is what gets called when you hit the State/Stop button
-(defn toggle-thread [#^java.awt.Panel panel mycells batch-set]
+(defn- toggle-thread [#^java.awt.Panel panel mycells batch-set]
   (if @running
     (let [mycounter (ref 0)
           num-batches (count batch-set)
