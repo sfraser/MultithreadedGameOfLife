@@ -135,8 +135,8 @@
           (.setVisible true))
 
         (. b addActionListener
-          (proxy [ActionListener] []
-            (actionPerformed [evt]
+          (reify ActionListener
+            (actionPerformed [_ evt]
               (reset! running (false? @running))
               (. b (setText (if @running "Start" "Stop")))
               (doseq [[panel procs cell-state batch-set] panels-and-state]
@@ -186,6 +186,7 @@
       [[(first %) (second %)] new-cell-state])
     batch-cells)))
 
+; I AM HERE - clean up and simplify this mess
 ; DEPRECATED - need to eliminate this, it is only used in startup now
 (defn- calc-initial-state [mycells batch-set]
   (let [new-cells (ref {})]
