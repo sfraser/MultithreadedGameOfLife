@@ -5,7 +5,7 @@
   ; See 'http://www.youtube.com/watch?v=CFCYVfApPUc for an example run
   )
 
-(ns org.frasers.life.MultiThreadedLife
+(ns org.frasers.life.MultiThreadedLife.core
   (:gen-class))
 
 (import '(javax.swing JFrame JPanel JButton)
