@@ -79,9 +79,13 @@
     ; we give each window 1, then 2, then 3... etc "threads" so the "precalced-batch-sets" are different
     ; sized for each window
     (def panels-and-state
-      (for [[threadNumber cell-state] initial-states-and-numprocs :let [frames (atom 0) lastts (atom 0) lastframes (atom 0) lastfps (atom 0)]]
+      (for [[threadNumber cell-state] initial-states-and-numprocs]
         [; the Panels have a custom paint function that first calls paint-cells then paints some stats on the window
-         (proxy [JPanel] [] (paint [#^java.awt.Graphics graphics]
+         (let [frames     (atom 0)
+               lastts     (atom 0)
+               lastframes (atom 0)
+               lastfps    (atom 0)]
+           (proxy [JPanel] [] (paint [#^java.awt.Graphics graphics]
            ; paint the grid of cells
            (paint-cells graphics cell-state)
            ; increment our total frames painted
@@ -97,7 +101,7 @@
                (do
                  (reset! lastts ts)
                  (reset! lastfps (- @frames @lastframes))
-                 (reset! lastframes @frames))))))
+                 (reset! lastframes @frames)))))))
          threadNumber
          cell-state
          ; since each window has a different set of threads, we calculate a "batch set" sized right for this window
